@@ -40,35 +40,12 @@ class MyVpnService : VpnService() {
         vpnInterface = builder.establish()
         Log.d("VPN", "VPN Interface established: $vpnInterface")
 
-        vpnInterface?.fileDescriptor?.let { fd ->
-            val inputStream = FileInputStream(fd)
-            val outputStream = FileOutputStream(fd)
-            val buffer = ByteBuffer.allocate(65535)
+        val vpnFileDescriptor = vpnInterface?.fileDescriptor ?: return
+        val outputStream = FileOutputStream(vpnFileDescriptor)
+        val outputChannel = outputStream.channel
 
-            while (!Thread.interrupted()) {
-                val length = inputStream.read(buffer.array())
-                if (length > 0) {
-                    buffer.limit(length)
-
-                    val domain = PacketParser.extractDomain(buffer)
-                    if (domain != null) {
-                        Log.d("VPN", "Accessed: $domain")
-
-                        if (blockedSites.contains(domain)) {
-                            Log.d("VPN", "Blocked: $domain")
-                            outputStream.write(ByteArray(length)) // Send empty response
-                            outputStream.flush()
-                            continue
-                        }
-                    }
-
-                    buffer.rewind()
-                    outputStream.write(buffer.array(), 0, length)
-                    outputStream.flush()
-                }
-                buffer.clear()
-            }
-        }
+        val packetReader = PacketReader(vpnFileDescriptor, outputChannel)
+        Thread(packetReader).start()
     }
 
     override fun onDestroy() {

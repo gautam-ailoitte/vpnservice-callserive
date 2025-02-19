@@ -2,14 +2,13 @@ package com.example.vpnservices
 
 
 
-object BlocklistManager {
-    private val blockedSites = mutableSetOf(
-        "facebook.com",
-        "youtube.com",
-        "example.com"
-    )
 
-    fun getBlockedSites(): Set<String> = blockedSites
+object BlocklistManager {
+    private val blockedSites = mutableSetOf("example.com", "facebook.com", "youtube.com")
+
+    fun getBlockedSites(): Set<String> {
+        return blockedSites
+    }
 
     fun addBlockedSite(domain: String) {
         blockedSites.add(domain)
@@ -19,3 +18,4 @@ object BlocklistManager {
         blockedSites.remove(domain)
     }
 }
+
