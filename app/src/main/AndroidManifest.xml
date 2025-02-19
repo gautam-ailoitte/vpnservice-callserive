@@ -15,7 +15,11 @@
     <application
         android:label="vpnservices"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true"
+        tools:ignore="ExtraText"
+        tools:targetApi="m">
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -39,6 +43,7 @@
             </intent-filter>
 
         </activity>
+
 <!--         service for call blocking-->
         <service
             android:name=".MyCallManagerService"
