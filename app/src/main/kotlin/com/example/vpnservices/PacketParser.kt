@@ -1,11 +1,7 @@
 package com.example.vpnservices
 
 import android.util.Log
-import org.xbill.DNS.Message
-import org.xbill.DNS.Record
-import org.xbill.DNS.Section
 import java.nio.ByteBuffer
-import kotlin.math.log
 
 object PacketParser {
     fun extractDomain(buffer: ByteBuffer): String? {
@@ -23,34 +19,80 @@ object PacketParser {
 
 
     private fun isDnsPacket(buffer: ByteBuffer): Boolean {
-        if (buffer.remaining() < 12) {
-            Log.d("isDNS VPN", "Packet too small to be DNS: Size = ${buffer.remaining()} bytes")
-            return false // Minimum DNS header size
+        if (buffer.remaining() < 20) { // Ensure it's at least big enough for an IPv4 header
+            Log.d("isDNS VPN", "Packet too small to be IPv4/IPv6: Size = ${buffer.remaining()} bytes")
+            return false
         }
 
         val pos = buffer.position()
-        val transactionId = ((buffer.get(pos).toInt() and 0xFF) shl 8) or (buffer.get(pos + 1).toInt() and 0xFF)
-        val flags = ((buffer.get(pos + 2).toInt() and 0xFF) shl 8) or (buffer.get(pos + 3).toInt() and 0xFF)
-        val qr = (flags shr 15) and 0x1 // QR: 0 = Query, 1 = Response
-        val opcode = (flags shr 11) and 0xF // Extract 4-bit Opcode
-        val qdCount = ((buffer.get(pos + 4).toInt() and 0xFF) shl 8) or (buffer.get(pos + 5).toInt() and 0xFF)
+        val firstByte = buffer.get(pos).toInt() and 0xF0
 
-        // ✅ Log all 12 header bytes in hex for debugging
-        val headerBytes = ByteArray(12)
-        buffer.position(pos)
-        buffer.get(headerBytes)
-        Log.d("isDns VPN", "Raw DNS Header: ${headerBytes.joinToString(" ") { String.format("%02X", it) }}")
+        return when (firstByte shr 4) {
+            4 -> checkIpv4UdpDns(buffer, pos) // IPv4 Packet
+            6 -> checkIpv6UdpDns(buffer, pos) // IPv6 Packet
+            else -> {
+                Log.d("isDNS VPN", "Unknown packet type")
+                false
+            }
+        }
+    }
 
-        // ✅ Log extracted values
-        Log.d("isDns VPN", "DNS Header: Transaction ID = $transactionId, QR = $qr, Opcode = $opcode, QDCount = $qdCount")
+    private fun checkIpv4UdpDns(buffer: ByteBuffer, pos: Int): Boolean {
+        // IPv4 Header Length
+        val ipHeaderLength = (buffer.get(pos).toInt() and 0x0F) * 4
+        val protocol = buffer.get(pos + 9).toInt() and 0xFF // Protocol field (TCP=6, UDP=17)
+        val srcIp = "${buffer.get(pos + 12).toInt() and 0xFF}.${buffer.get(pos + 13).toInt() and 0xFF}.${buffer.get(pos + 14).toInt() and 0xFF}.${buffer.get(pos + 15).toInt() and 0xFF}"
 
-        if (qdCount > 10) { // Unusual count, likely corruption
-            Log.e("isDns VPN", "Suspicious QDCount: $qdCount - DNS packet might be malformed!")
+        if (protocol != 17) { // UDP = 17
+            Log.d("isDNS VPN", "Ignoring non-UDP packet from $srcIp")
             return false
         }
-        val isDns = qr == 0 && qdCount > 0
-        Log.d("isDns VPN", "Packet is DNS Query? -> $isDns")
-        return isDns  // Ensure it's a valid DNS query
+
+        val udpStart = pos + ipHeaderLength
+        val destPort = ((buffer.get(udpStart + 2).toInt() and 0xFF) shl 8) or (buffer.get(udpStart + 3).toInt() and 0xFF)
+
+        if (destPort != 53) {
+            Log.d("isDNS VPN", "Ignoring non-DNS UDP packet on port $destPort")
+            return false
+        }
+
+        buffer.position(udpStart + 8) // Move to UDP payload (DNS header)
+        return validateDnsHeader(buffer)
+    }
+
+    private fun checkIpv6UdpDns(buffer: ByteBuffer, pos: Int): Boolean {
+        if (buffer.remaining() < 40) return false // Minimum IPv6 header size
+
+        val protocol = buffer.get(pos + 6).toInt() and 0xFF // Next Header field
+        if (protocol != 17) { // UDP = 17
+            Log.d("isDNS VPN", "Ignoring non-UDP IPv6 packet")
+            return false
+        }
+
+        val udpStart = pos + 40
+        val destPort = ((buffer.get(udpStart + 2).toInt() and 0xFF) shl 8) or (buffer.get(udpStart + 3).toInt() and 0xFF)
+
+        if (destPort != 53) {
+            Log.d("isDNS VPN", "Ignoring non-DNS UDP packet on port $destPort")
+            return false
+        }
+
+        buffer.position(udpStart + 8) // Move to UDP payload (DNS header)
+        return validateDnsHeader(buffer)
+    }
+
+    private fun validateDnsHeader(buffer: ByteBuffer): Boolean {
+        if (buffer.remaining() < 12) return false
+
+        val transactionId = ((buffer.get().toInt() and 0xFF) shl 8) or (buffer.get().toInt() and 0xFF)
+        val flags = ((buffer.get().toInt() and 0xFF) shl 8) or (buffer.get().toInt() and 0xFF)
+        val qr = (flags shr 15) and 0x1 // QR: 0 = Query, 1 = Response
+        val opcode = (flags shr 11) and 0xF // Extract 4-bit Opcode
+        val qdCount = ((buffer.get().toInt() and 0xFF) shl 8) or (buffer.get().toInt() and 0xFF)
+
+        Log.d("isDns VPN", "DNS Header: Transaction ID = $transactionId, QR = $qr, Opcode = $opcode, QDCount = $qdCount")
+
+        return qr == 0 && qdCount > 0
     }
 
 
