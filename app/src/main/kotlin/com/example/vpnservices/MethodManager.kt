@@ -5,6 +5,7 @@ import android.app.role.RoleManager
 import android.content.Context
 import android.content.Context.ROLE_SERVICE
 import android.content.Intent
+import android.net.VpnService
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
@@ -27,6 +28,14 @@ class MethodChannelManager(private val context: Context, private val activity: A
                 stopCallScreening()
                 result.success("Call Screening Stopped")
             }
+                "startVpn" -> {
+                    startVpnService()
+                    result.success("VPN Started")
+                }
+                "stopVpn" -> {
+                    stopVpnService()
+                    result.success("VPN Stopped")
+                }
                 else -> result.notImplemented()
             }
         }
@@ -82,6 +91,20 @@ class MethodChannelManager(private val context: Context, private val activity: A
         val intent = Intent()
         intent.setClass(context, MyCallManagerService::class.java)
        activity.stopService(intent)
+    }
+
+    private fun startVpnService() {
+        val intent = Intent(context, MyVpnService::class.java)
+        intent.action = VpnService.SERVICE_INTERFACE
+
+        activity.startService(intent)
+        Log.d("VPN", "VPN Service Started")
+    }
+
+    private fun stopVpnService() {
+        val intent = Intent(context, MyVpnService::class.java)
+        activity.stopService(intent)
+        Log.d("VPN", "VPN Service Stopped")
     }
 
 }
